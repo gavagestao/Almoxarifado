@@ -21,7 +21,6 @@ st.markdown("""
     [data-testid="stMetricLabel"] { color: #64748b !important; font-weight: 600 !important; }
     [data-testid="stMetricValue"] { color: #0f172a !important; }
     
-    /* Badges Estilizados */
     .badge-entrada {
         background-color: #dcfce7; color: #166534;
         padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 13px;
@@ -36,22 +35,18 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. BANCO DE DADOS SIMPLIFICADO ---
-# Em um uso real, você alimentaria estas listas via formulário
+# --- 3. BANCO DE DADOS (PERSISTÊNCIA SIMPLES) ---
 if 'estoque' not in st.session_state:
     st.session_state.estoque = pd.DataFrame([
-        {'ID': 1, 'Produto': 'Cabo Flexível 2.5mm', 'Categoria': 'Elétrica', 'Qtd': 100, 'Minimo': 500, 'Preco': 2.50},
-        {'ID': 2, 'Produto': 'Tubo PVC 100mm', 'Categoria': 'Hidráulica', 'Qtd': 15, 'Minimo': 100, 'Preco': 45.00},
-        {'ID': 3, 'Produto': 'Parafuso Phillips 6mm', 'Categoria': 'Fixação', 'Qtd': 800, 'Minimo': 1000, 'Preco': 0.15}
+        {'Produto': 'Cabo Flexível 2.5mm', 'Categoria': 'Elétrica', 'Qtd': 100, 'Minimo': 500, 'Preco': 2.50},
+        {'Produto': 'Tubo PVC 100mm', 'Categoria': 'Hidráulica', 'Qtd': 15, 'Minimo': 100, 'Preco': 45.00}
     ])
 
 if 'movs' not in st.session_state:
-    st.session_state.movs = pd.DataFrame([
-        {'Tipo': 'Entrada', 'Produto': 'Parafuso Phillips 6mm', 'Qtd': 200, 'Motivo': 'Compra fornecedor', 'Data': '31/10/2024'},
-        {'Tipo': 'Saída', 'Produto': 'Luva de Procedimento M', 'Qtd': 5, 'Motivo': 'Uso setor produção', 'Data': '04/11/2024'}
-    ])
+    st.session_state.movs = pd.DataFrame(columns=['Tipo', 'Produto', 'Qtd', 'Motivo', 'Data'])
 
 df = st.session_state.estoque
+# Cálculos de segurança
 df['Status_Critico'] = (df['Qtd'] <= (df['Minimo'] * 0.20))
 df['Valor_Total'] = df['Qtd'] * df['Preco']
 
@@ -60,8 +55,8 @@ with st.sidebar:
     st.markdown("<h2 style='color:white; text-align:center;'>🏢 Almoxarifado</h2>", unsafe_allow_html=True)
     escolha = option_menu(
         menu_title=None,
-        options=["Painel", "Produtos", "Movimentações", "Relatórios"],
-        icons=["grid-1x2", "box", "arrow-left-right", "file-earmark-bar-graph"],
+        options=["Painel", "Produtos", "Movimentações"],
+        icons=["grid-1x2", "box", "arrow-left-right"],
         default_index=0,
         styles={
             "container": {"background-color": "#0f172a"},
@@ -74,6 +69,16 @@ with st.sidebar:
 
 if escolha == "Painel":
     st.title("📊 Visão Geral da Obra")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
+    
+    patrimonio_total = df['Valor_Total'].sum()
+    
     c1.metric("Itens Críticos", len(df[df['Status_Critico']]))
-    c2.metric("Patrimônio", f"R$ {df
+    c2.metric("Patrimônio Total", f"R$ {patrimonio_total:,.2f}")
+    c3.metric("Saldo em Unidades", int(df['Qtd'].sum()))
+
+    st.divider()
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("Distribuição de Estoque")
+        fig = px.pie(df, values='Qtd', names='Categoria', hole=0.6
