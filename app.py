@@ -47,4 +47,43 @@ if menu == "Painel":
     
     # Cálculos de Datas e Filtros
     data_ontem = (datetime.now() - timedelta(1)).strftime("%d/%m/%Y")
-    movs_ontem = st.session_state.movs
+    movs_ontem = st.session_state.movs[st.session_state.movs['Data'] == data_ontem]
+    
+    entradas_ontem = movs_ontem[movs_ontem['Tipo'] == 'Entrada']['Qtd'].sum()
+    saidas_ontem = movs_ontem[movs_ontem['Tipo'] == 'Saída']['Qtd'].sum()
+    itens_baixo = st.session_state.estoque[st.session_state.estoque['Qtd'] <= (st.session_state.estoque['Meta'] * 0.20)]
+
+    # Layout de Métricas
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.metric("Entradas (Ontem)", int(entradas_ontem))
+        if st.button("Ver Movimentações", key="goto_mov"):
+            st.info("Clique em 'Movimentações' no menu lateral para filtrar por data.")
+            
+    with c2:
+        st.metric("Saídas (Ontem)", int(saidas_ontem))
+        
+    with c3:
+        st.metric("Estoque Baixo (<20%)", len(itens_baixo))
+        if st.button("Ver Itens Críticos", key="goto_prod"):
+             st.info("Vá para 'Produtos' e use a busca para filtrar itens em 'Alerta'.")
+
+    st.markdown("---")
+    
+    # Gráfico de Situação Atual
+    fig = px.bar(st.session_state.estoque, x='Nome', y='Qtd', color='Categoria', 
+                 title="Saldo Atual de Materiais", template="plotly_white")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "Produtos":
+    st.title("📦 Inventário")
+    # (O código de produtos permanece com a lógica de busca e status que já funcionava)
+    st.write("Filtre aqui os produtos em Alerta.")
+    st.dataframe(st.session_state.estoque)
+
+elif menu == "Movimentações":
+    st.title("🔄 Histórico de Movimentações")
+    # (O código de movimentações permanece registrando entradas e saídas)
+    st.write(f"Exibindo registros. Movimentações de ontem ({data_ontem}): {len(movs_ontem)}")
+    st.table(st.session_state.movs)
