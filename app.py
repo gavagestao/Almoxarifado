@@ -3,106 +3,126 @@ import pandas as pd
 import plotly.express as px
 import os
 from streamlit_option_menu import option_menu
+from datetime import datetime
 
-# 1. CONFIGURAÇÃO DA PÁGINA (DEVE SER A PRIMEIRA COISA)
-st.set_page_config(page_title="Instaladora Pro - Gestão de Estoque", layout="wide")
+# 1. CONFIGURAÇÃO E DESIGN
+st.set_page_config(page_title="Gestão de Obra Pro", layout="wide")
 
-# 2. ESTOQUE/CSS PARA CORRIGIR OS CARDS BRANCOS
+# CSS Avançado para emular o estilo da imagem enviada
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
+    /* Fundo e Fonte */
+    .main { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
     
-    /* Estilização dos Cards de Métrica */
-    [data-testid="stMetric"] {
-        background-color: #ffffff !important;
+    /* Barra de Busca e Filtros */
+    .search-container {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        display: flex;
+        gap: 10px;
+    }
+
+    /* Estilo dos Cards de Métrica */
+    div[data-testid="stMetric"] {
+        background-color: white !important;
+        border: 1px solid #e2e8f0 !important;
         padding: 20px !important;
         border-radius: 12px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-        border: 1px solid #edf2f7 !important;
     }
-    
-    /* FORÇAR COR DO TEXTO PARA APARECER NO DARK MODE */
-    [data-testid="stMetricLabel"] {
-        color: #4a5568 !important;
-        font-weight: bold !important;
+
+    /* Badges de Entrada/Saída */
+    .badge-entrada {
+        background-color: #dcfce7;
+        color: #166534;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 12px;
     }
-    [data-testid="stMetricValue"] {
-        color: #1a202c !important;
+    .badge-saida {
+        background-color: #ffedd5;
+        color: #9a3412;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 12px;
     }
-    
-    [data-testid="stSidebar"] { background-color: #1e293b; }
+
+    /* Sidebar Dark */
+    [data-testid="stSidebar"] { background-color: #0f172a; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE DADOS ---
-DB_FILE = "estoque_dados.csv"
-
-def carregar_dados():
-    if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE)
-    return pd.DataFrame([
-        {'ID': 1, 'Produto': 'Cabo Flex 2.5mm', 'Categoria': 'Elétrica', 'Obra': 'Matriz', 'Qtd': 100, 'Minimo': 500, 'Preco': 2.50},
-        {'ID': 2, 'Produto': 'Tubo PVC 100mm', 'Categoria': 'Hidráulica', 'Obra': 'Obra A', 'Qtd': 15, 'Minimo': 100, 'Preco': 45.00}
+# --- BANCO DE DADOS (Simulado para este exemplo) ---
+if 'movimentacoes' not in st.session_state:
+    st.session_state.movimentacoes = pd.DataFrame([
+        {'Tipo': 'Entrada', 'Produto': 'Parafuso Phillips 6mm', 'Qtd': 200, 'Motivo': 'Compra fornecedor', 'Data': '31/10/2024'},
+        {'Tipo': 'Saída', 'Produto': 'Luva de Procedimento M', 'Qtd': 5, 'Motivo': 'Uso setor produção', 'Data': '04/11/2024'},
+        {'Tipo': 'Entrada', 'Produto': 'Fita Isolante Preta', 'Qtd': 15, 'Motivo': 'Reposição estoque', 'Data': '09/11/2024'},
+        {'Tipo': 'Saída', 'Produto': 'Capacete de Segurança', 'Qtd': 2, 'Motivo': 'Entrega novos funcionários', 'Data': '11/11/2024'}
     ])
-
-if 'estoque' not in st.session_state:
-    st.session_state.estoque = carregar_dados()
-
-df = st.session_state.estoque
-df['Status_Critico'] = (df['Qtd'] <= (df['Minimo'] * 0.20))
-df['Valor_Total'] = df['Qtd'] * df['Preco']
 
 # --- MENU LATERAL ---
 with st.sidebar:
-    st.title("🏗️ Instaladora Pro")
+    st.markdown("<h2 style='color:white; text-align:center;'>🏢 Almoxarifado</h2>", unsafe_allow_html=True)
     escolha = option_menu(
         menu_title=None,
-        options=["Dashboard", "Inventário", "Movimentar", "Relatórios"],
-        icons=["house", "box-seam", "arrow-left-right", "file-earmark-bar-graph"],
-        default_index=0,
+        options=["Painel", "Produtos", "Movimentações"],
+        icons=["grid-1x2", "box", "arrow-left-right"],
+        default_index=2, # Começa na página que você mostrou
         styles={
-            "container": {"padding": "0!important", "background-color": "#1e293b"},
-            "icon": {"color": "#fbbf24", "font-size": "18px"}, 
-            "nav-link": {"font-size": "16px", "color": "white"},
-            "nav-link-selected": {"background-color": "#334155"},
+            "container": {"background-color": "#0f172a"},
+            "nav-link": {"color": "#94a3b8", "font-size": "15px", "text-align": "left"},
+            "nav-link-selected": {"background-color": "#1e293b", "color": "#f8fafc"},
         }
     )
 
-# --- PÁGINAS ---
-if escolha == "Dashboard":
-    st.title("📊 Visão Geral da Obra")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Itens Críticos", len(df[df['Status_Critico']]))
-    c2.metric("Patrimônio", f"R$ {df['Valor_Total'].sum():,.2f}")
-    c3.metric("Saldo Total", int(df['Qtd'].sum()))
-    c4.metric("Obras", df['Obra'].nunique())
+# --- PÁGINA DE MOVIMENTAÇÕES (O modelo da imagem) ---
+if escolha == "Movimentações":
+    col_t1, col_t2 = st.columns([8, 2])
+    with col_t1:
+        st.title("Movimentações")
+    with col_t2:
+        st.write("") # Espaçador
+        if st.button("+ Nova Movimentação", use_container_width=True, type="primary"):
+            st.toast("Função de cadastro abrirá aqui!")
 
-    st.divider()
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("Distribuição por Categoria")
-        fig = px.pie(df, values='Qtd', names='Categoria', hole=0.6)
-        st.plotly_chart(fig, use_container_width=True)
-    with col_b:
-        st.subheader("⚠️ Itens abaixo de 20%")
-        criticos = df[df['Status_Critico']]
-        if not criticos.empty:
-            st.bar_chart(criticos.set_index('Produto')['Qtd'])
-        else:
-            st.success("Tudo em ordem!")
+    # Barra de busca e Filtro
+    c_search, c_filter = st.columns([9, 1])
+    busca = c_search.text_input("🔍 Buscar por produto...", label_visibility="collapsed")
+    c_filter.button("⚙️ Filtros")
 
-elif escolha == "Inventário":
-    st.title("📝 Inventário de Materiais")
-    st.dataframe(df, use_container_width=True)
+    # Tabela Estilizada
+    st.markdown("---")
+    
+    # Cabeçalho da Tabela
+    h1, h2, h3, h4, h5 = st.columns([1.5, 3.5, 1, 3, 2])
+    h1.caption("Tipo")
+    h2.caption("Produto")
+    h3.caption("Qtd.")
+    h4.caption("Motivo / Destino")
+    h5.caption("Data")
 
-elif escolha == "Movimentar":
-    st.title("🔄 Registrar Entrada/Saída")
-    prod_sel = st.selectbox("Produto", df['Produto'].unique())
-    tipo = st.radio("Operação", ["Entrada", "Saída"], horizontal=True)
-    qtd = st.number_input("Quantidade", min_value=1)
-    if st.button("Confirmar"):
-        st.success(f"Movimentação de {prod_sel} gravada!")
+    # Linhas da Tabela
+    for index, row in st.session_state.movimentacoes.iterrows():
+        if busca.lower() in row['Produto'].lower():
+            r1, r2, r3, r4, r5 = st.columns([1.5, 3.5, 1, 3, 2])
+            
+            # Badge de Tipo
+            if row['Tipo'] == 'Entrada':
+                r1.markdown(f'<span class="badge-entrada">● Entrada</span>', unsafe_allow_html=True)
+            else:
+                r1.markdown(f'<span class="badge-saida">● Saída</span>', unsafe_allow_html=True)
+            
+            r2.markdown(f"**{row['Produto']}**")
+            r3.write(row['Qtd'])
+            r4.write(row['Motivo'])
+            r5.write(row['Data'])
+            st.markdown("<hr style='margin:5px 0; border-color:#f1f5f9'>", unsafe_allow_html=True)
 
-elif escolha == "Relatórios":
-    st.title("📋 Relatório para Diretores")
-    st.table(df[['Obra', 'Produto', 'Qtd', 'Valor_Total']])
+# --- DEMAIS PÁGINAS (Simuladas) ---
+elif escolha == "Painel":
+    st.title("Dashboard
