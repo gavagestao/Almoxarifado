@@ -32,7 +32,13 @@ if 'estoque' not in st.session_state:
 if 'movs' not in st.session_state:
     st.session_state.movs = pd.DataFrame(columns=['Tipo', 'Produto', 'Qtd', 'Motivo', 'Data'])
 
-df = st.session_state.estoque
+# PROTEÇÃO CONTRA ERROS DE TIPO (FORÇAR NÚMEROS)
+df = st.session_state.estoque.copy()
+df['Qtd'] = pd.to_numeric(df['Qtd'], errors='coerce').fillna(0)
+df['Minimo'] = pd.to_numeric(df['Minimo'], errors='coerce').fillna(1)
+df['Preco'] = pd.to_numeric(df['Preco'], errors='coerce').fillna(0)
+
+# CÁLCULOS
 df['Status_Critico'] = (df['Qtd'] <= (df['Minimo'] * 0.20))
 df['Valor_Total'] = df['Qtd'] * df['Preco']
 
@@ -53,8 +59,9 @@ if escolha == "Painel":
     
     col_a, col_b = st.columns(2)
     with col_a:
-        fig = px.pie(df, values='Qtd', names='Categoria', hole=0.6, title="Distribuição")
-        st.plotly_chart(fig, use_container_width=True)
+        if not df.empty:
+            fig = px.pie(df, values='Qtd', names='Categoria', hole=0.6, title="Distribuição")
+            st.plotly_chart(fig, use_container_width=True)
     with col_b:
         criticos = df[df['Status_Critico']]
         if not criticos.empty:
@@ -68,9 +75,39 @@ elif escolha == "Produtos":
     with st.expander("➕ Novo Produto"):
         with st.form("n_prod"):
             n_p = st.text_input("Nome")
-            n_c = st.selectbox("Cat", ["Elétrica", "Hidráulica", "Fixação"])
-            n_m = st.number_input("Mínimo", min_value=1)
-            n_v = st.number_input("Preço", min_value=0.0)
+            n_c = st.selectbox("Cat", ["Elétrica", "Hidráulica", "Fixação", "Outros"])
+            n_m = st.number_input("Mínimo (Meta 100%)", min_value=1, value=100)
+            n_v = st.number_input("Preço Unitário", min_value=0.0, value=1.0)
             if st.form_submit_button("Salvar"):
                 novo = pd.DataFrame([{'Produto': n_p, 'Categoria': n_c, 'Qtd': 0, 'Minimo': n_m, 'Preco': n_v}])
-                st.session_state.estoque = pd.concat
+                st.session_state.estoque = pd.concat([st.session_state.estoque, novo], ignore_index=True)
+                st.rerun()
+    st.dataframe(st.session_state.estoque, use_container_width=True)
+
+elif escolha == "Movimentações":
+    st.title("🔄 Entradas e Saídas")
+    with st.expander("🚀 Registrar"):
+        with st.form("n_mov"):
+            m_p = st.selectbox("Produto", df['Produto'].unique())
+            m_t = st.radio("Tipo", ["Entrada", "Saída"], horizontal=True)
+            m_q = st.number_input("Qtd", min_value=1, value=1)
+            m_m = st.text_input("Motivo")
+            if st.form_submit_button("Confirmar"):
+                idx = st.session_state.estoque[st.session_state.estoque['Produto'] == m_p].index[0]
+                if m_t == "Entrada": 
+                    st.session_state.estoque.at[idx, 'Qtd'] += m_q
+                else: 
+                    st.session_state.estoque.at[idx, 'Qtd'] -= m_q
+                
+                nova = pd.DataFrame([{'Tipo': m_t, 'Produto': m_p, 'Qtd': m_q, 'Motivo': m_m, 'Data': datetime.now().strftime("%d/%m/%Y")}])
+                st.session_state.movs = pd.concat([nova, st.session_state.movs], ignore_index=True)
+                st.rerun()
+    
+    for _, r in st.session_state.movs.iterrows():
+        c1, c2, c3, c4 = st.columns([1, 3, 1, 3])
+        s = "badge-entrada" if r['Tipo'] == "Entrada" else "badge-saida"
+        c1.markdown(f'<span class="{s}">{r["Tipo"]}</span>', unsafe_allow_html=True)
+        c2.markdown(f"**{r['Produto']}**")
+        c3.write(r['Qtd'])
+        c4.write(f"{r['Data']} - {r['Motivo']}")
+        st.markdown("<hr>", unsafe_allow_html=True)
