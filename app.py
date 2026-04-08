@@ -1,86 +1,134 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
 # Configuração da página
-st.set_page_config(page_title="Gestão de Estoque - Instaladora", layout="wide")
+st.set_page_config(page_title="Sistema de Estoque - Instaladora", layout="wide")
 
-# Simulação de Banco de Dados (Em um sistema real, usaríamos SQL)
+# --- FUNÇÕES DE BANCO DE DADOS (CSV) ---
+DB_FILE = "estoque_dados.csv"
+
+def carregar_dados():
+    if os.path.exists(DB_FILE):
+        return pd.read_csv(DB_FILE)
+    else:
+        # Dados iniciais caso o arquivo não exista
+        return pd.DataFrame([
+            {'ID': 1, 'Produto': 'Cabo Flex 2.5mm', 'Categoria': 'Elétrica', 'Obra': 'Matriz', 'Qtd': 100, 'Minimo': 500, 'Preco': 2.50},
+            {'ID': 2, 'Produto': 'Tubo PVC 100mm', 'Categoria': 'Hidráulica', 'Obra': 'Obra Residencial A', 'Qtd': 15, 'Minimo': 100, 'Preco': 45.00}
+        ])
+
+def salvar_dados(df):
+    df.to_csv(DB_FILE, index=False)
+
+# Inicializar dados na sessão
 if 'estoque' not in st.session_state:
-    st.session_state.estoque = pd.DataFrame([
-        {'ID': 1, 'Produto': 'Cabo Flexível 2.5mm', 'Categoria': 'Elétrica', 'Qtd': 100, 'Minimo': 500},
-        {'ID': 2, 'Produto': 'Tubo PVC 100mm', 'Categoria': 'Hidráulica', 'Qtd': 15, 'Minimo': 100},
-        {'ID': 3, 'Produto': 'Disjuntor DIN 20A', 'Categoria': 'Elétrica', 'Qtd': 50, 'Minimo': 60},
-    ])
+    st.session_state.estoque = carregar_dados()
 
-# --- CÁLCULOS DE DASHBOARD ---
 df = st.session_state.estoque
+
+# --- CÁLCULOS TÉCNICOS ---
 df['Status_Critico'] = (df['Qtd'] <= (df['Minimo'] * 0.20))
+df['Valor_Total'] = df['Qtd'] * df['Preco']
 
-# --- MENU LATERAL ---
-menu = st.sidebar.selectbox("Navegação", ["Dashboard", "Estoque & Cadastro", "Movimentações", "Relatórios Diretores"])
+# --- INTERFACE LATERAL ---
+st.sidebar.title("🛠️ Gestão de Instaladora")
+menu = st.sidebar.radio("Selecione a Área", ["Painel Geral", "Inventário", "Entradas/Saídas", "Relatório Executivo"])
 
-# --- 1. DASHBOARD ---
-if menu == "Dashboard":
-    st.title("📊 Painel de Controle de Obras")
+# --- 1. PAINEL GERAL (DASHBOARD) ---
+if menu == "Painel Geral":
+    st.title("📊 Dashboard de Materiais")
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Itens Críticos (<20%)", len(df[df['Status_Critico']]))
-    col2.metric("Total de Itens", df['Qtd'].sum())
-    col3.metric("Categorias Ativas", df['Categoria'].nunique())
+    # Métricas principais
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Itens Críticos (<20%)", len(df[df['Status_Critico']]), delta_color="inverse")
+    c2.metric("Patrimônio em Estoque", f"R$ {df['Valor_Total'].sum():,.2f}")
+    c3.metric("Total de Unidades", int(df['Qtd'].sum()))
+    c4.metric("Obras Ativas", df['Obra'].nunique())
 
     st.divider()
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("📦 Quantidade por Categoria")
-        fig_cat = px.pie(df, values='Qtd', names='Categoria', hole=0.4)
-        st.plotly_chart(fig_cat)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("📦 Volume por Categoria")
+        fig_pie = px.pie(df, values='Qtd', names='Categoria', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+        st.plotly_chart(fig_pie, use_container_width=True)
         
-    with c2:
-        st.subheader("⚠️ Estado Crítico (Abaixo de 20% do Ideal)")
-        criticos = df[df['Status_Critico']]
+    with col_b:
+        st.subheader("⚠️ Alerta: Estoque Crítico (Abaixo de 20%)")
+        criticos = df[df['Status_Critico']].copy()
         if not criticos.empty:
-            fig_critico = px.bar(criticos, x='Produto', y='Qtd', color_discrete_sequence=['red'])
-            st.plotly_chart(fig_critico)
+            fig_bar = px.bar(criticos, x='Produto', y='Qtd', color='Obra', title="Produtos para Reposição Imediata")
+            st.plotly_chart(fig_bar, use_container_width=True)
         else:
-            st.success("Nenhum item em estado crítico!")
+            st.success("Tudo em ordem! Nenhum item abaixo do nível de segurança.")
 
-# --- 2. ESTOQUE & CADASTRO ---
-elif menu == "Estoque & Cadastro":
-    st.title("📝 Cadastro e Inventário")
+# --- 2. INVENTÁRIO & CADASTRO ---
+elif menu == "Inventário":
+    st.title("📝 Cadastro de Materiais")
     
-    with st.expander("Cadastrar Novo Produto"):
-        novo_p = st.text_input("Nome do Produto")
-        nova_cat = st.selectbox("Categoria", ["Elétrica", "Hidráulica", "Infraestrutura", "Civil"])
-        minimo = st.number_input("Estoque Ideal (100%)", min_value=1)
-        if st.button("Salvar"):
-            st.success(f"{novo_p} cadastrado com sucesso!")
+    with st.expander("➕ Adicionar Novo Item ao Estoque"):
+        with st.form("form_cadastro"):
+            c1, c2 = st.columns(2)
+            nome = c1.text_input("Nome do Produto (especificações)")
+            cat = c2.selectbox("Categoria", ["Elétrica", "Hidráulica", "Infraestrutura", "Incêndio", "Ferramentas"])
+            c3, c4, c5 = st.columns(3)
+            obra_alvo = c3.text_input("Obra/Localização", value="Almoxarifado")
+            estoque_ideal = c4.number_input("Estoque 100% (Meta)", min_value=1)
+            preco_un = c5.number_input("Preço Unitário (R$)", min_value=0.0, format="%.2f")
+            
+            if st.form_submit_button("Cadastrar"):
+                novo_id = df['ID'].max() + 1 if not df.empty else 1
+                novo_item = {
+                    'ID': novo_id, 'Produto': nome, 'Categoria': cat, 
+                    'Obra': obra_alvo, 'Qtd': 0, 'Minimo': estoque_ideal, 'Preco': preco_un
+                }
+                st.session_state.estoque = pd.concat([df, pd.DataFrame([novo_item])], ignore_index=True)
+                salvar_dados(st.session_state.estoque)
+                st.success("Produto cadastrado! Use 'Entradas' para adicionar saldo.")
+                st.rerun()
 
-    st.subheader("Lista de Materiais")
-    st.dataframe(df, use_container_width=True)
+    st.subheader("Tabela Geral de Saldo")
+    st.dataframe(df[['ID', 'Produto', 'Categoria', 'Obra', 'Qtd', 'Minimo', 'Preco']], use_container_width=True)
 
 # --- 3. MOVIMENTAÇÕES ---
-elif menu == "Movimentações":
-    st.title("🔄 Entradas, Saídas e Transferências")
+elif menu == "Entradas/Saídas":
+    st.title("🔄 Movimentação de Canteiro")
     
-    tipo = st.radio("Tipo de Operação", ["Entrada", "Saída", "Transferência Recebida", "Transferência Enviada"])
-    prod = st.selectbox("Selecione o Produto", df['Produto'].tolist())
-    qtd_mov = st.number_input("Quantidade", min_value=1)
-    
-    if st.button("Confirmar Movimentação"):
-        st.warning(f"Movimentação de {qtd_mov} unidades de {prod} registrada no histórico.")
+    with st.form("movimentar"):
+        produto_sel = st.selectbox("Selecione o Material", df['Produto'].tolist())
+        tipo_mov = st.radio("Tipo", ["Entrada (Compra/Sobra)", "Saída (Uso na Obra)", "Transferência"], horizontal=True)
+        quantidade = st.number_input("Quantidade da Operação", min_value=1)
+        
+        if st.form_submit_button("Confirmar Movimentação"):
+            idx = df[df['Produto'] == produto_sel].index[0]
+            if "Entrada" in tipo_mov:
+                df.at[idx, 'Qtd'] += quantidade
+            elif "Saída" in tipo_mov:
+                if df.at[idx, 'Qtd'] >= quantidade:
+                    df.at[idx, 'Qtd'] -= quantidade
+                else:
+                    st.error("Saldo insuficiente para essa saída!")
+                    st.stop()
+            
+            salvar_dados(df)
+            st.success(f"Movimentação de {quantidade} unidades realizada com sucesso!")
+            st.rerun()
 
-# --- 4. RELATÓRIOS ---
-elif menu == "Relatórios Diretores":
-    st.title("📋 Relatórios Executivos")
-    st.write("Dados consolidados para exportação.")
+# --- 4. RELATÓRIO DIRETORIA ---
+elif menu == "Relatório Executivo":
+    st.title("📋 Relatório para Diretores")
     
-    st.table(df[['Produto', 'Categoria', 'Qtd', 'Minimo']])
+    st.markdown("""
+    Este relatório consolida o valor financeiro imobilizado e os riscos de parada de obra.
+    """)
     
-    st.download_button(
-        label="📥 Baixar Relatório Completo (CSV)",
-        data=df.to_csv().encode('utf-8'),
-        file_name='relatorio_estoque_obra.csv',
-        mime='text/csv',
-    )
+    # Tabela formatada para executivos
+    relatorio_df = df[['Obra', 'Categoria', 'Produto', 'Qtd', 'Preco', 'Valor_Total']].copy()
+    relatorio_df.columns = ['Local', 'Tipo', 'Descrição', 'Qtd em Mãos', 'Preço Unit.', 'Total R$']
+    
+    st.table(relatorio_df)
+    
+    csv = relatorio_df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Baixar Planilha para Reunião", data=csv, file_name="relatorio_estoque.csv", mime="text/csv")
